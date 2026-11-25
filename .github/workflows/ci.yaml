@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+defaults:
+  run:
+    # package.json lives in the app folder, not at the repo root.
+    working-directory: codebase/rdicidr-0.1.0
+
 jobs:
   install:
     # pull_request.branches matches the BASE branch; gate on the PR's source branch here.
