@@ -2,11 +2,28 @@ apiVersion: v1
 kind: Service
 metadata:
   name: rdicidr-service
+  namespace: production
 spec:
   type: ClusterIP
   selector:
-    app: rdicidr-web
+    app: rdicidr
   ports:
     - protocol: TCP
+      port: 8080
+      targetPort: 80
+---
+# Headless governing Service required by the StatefulSet (spec.serviceName).
+apiVersion: v1
+kind: Service
+metadata:
+  name: rdicidr-headless
+  namespace: production
+spec:
+  clusterIP: None
+  selector:
+    app: rdicidr
+  ports:
+    - name: http
+      protocol: TCP
       port: 80
       targetPort: 80

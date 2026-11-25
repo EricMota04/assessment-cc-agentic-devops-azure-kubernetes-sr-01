@@ -1,0 +1,128 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deploy at a time; queue a newer push instead of cancelling a deploy mid-flight.
+concurrency:
+  group: cd-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  RG: fsl-challenge-rg
+  ACR: fslchal44757
+  ENV: fsl-env
+  APP: fsl-app
+  APP_DIR: codebase/rdicidr-0.1.0
+  IMAGE_NAME: fsl-app:${{ github.sha }}
+  # nginx.conf in the image listens on 80.
+  TARGET_PORT: '80'
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Azure login
+        uses: azure/login@v3
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Build and push image (ACR Tasks)
+        run: |
+          az acr build \
+            --registry "$ACR" \
+            --resource-group "$RG" \
+            --image "$IMAGE_NAME" \
+            "$APP_DIR"
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          image="$ACR.azurecr.io/$IMAGE_NAME"
+          exists=$(az containerapp list -g "$RG" --query "length([?name=='$APP'])" -o tsv)
+          if [ "$exists" = "0" ]; then
+            echo "Container App $APP not found in $RG; creating it with a public placeholder image."
+            az containerapp create -g "$RG" -n "$APP" --environment "$ENV" \
+              --image mcr.microsoft.com/k8se/quickstart:latest \
+              --ingress external --target-port "$TARGET_PORT" \
+              --output none
+          fi
+          # Pull auth: ACR admin user. With --server only, the CLI looks up the admin credentials
+          # itself (registries/listCredentials, allowed for the RG-scoped Contributor SP) and stores
+          # the password as a Container App secret, so it never passes through this workflow.
+          # A managed identity would need an AcrPull role assignment, which Contributor cannot create.
+          az containerapp registry set -g "$RG" -n "$APP" --server "$ACR.azurecr.io" --output none
+          az containerapp update -g "$RG" -n "$APP" --image "$image" --output none
+          az containerapp ingress enable -g "$RG" -n "$APP" \
+            --type external --target-port "$TARGET_PORT" --transport auto \
+            --output none
+
+      - name: Verify revision and publish URL
+        id: verify
+        run: |
+          image="$ACR.azurecr.io/$IMAGE_NAME"
+          latest=$(az containerapp show -g "$RG" -n "$APP" --query properties.latestRevisionName -o tsv)
+          ready=""
+          for attempt in $(seq 1 30); do
+            ready=$(az containerapp show -g "$RG" -n "$APP" --query properties.latestReadyRevisionName -o tsv)
+            if [ "$ready" = "$latest" ]; then
+              break
+            fi
+            echo "Waiting for revision $latest to become ready ($attempt/30, latest ready: ${ready:-none})"
+            sleep 10
+          done
+          az containerapp revision show -g "$RG" -n "$APP" --revision "$latest" \
+            --query '{revision:name, image:properties.template.containers[0].image, running:properties.runningState, health:properties.healthState, provisioning:properties.provisioningState}' \
+            -o table
+          if [ "$ready" != "$latest" ]; then
+            echo "::error::Revision $latest never became ready (latest ready: ${ready:-none})"
+            exit 1
+          fi
+          running_image=$(az containerapp revision show -g "$RG" -n "$APP" --revision "$latest" \
+            --query 'properties.template.containers[0].image' -o tsv)
+          if [ "$running_image" != "$image" ]; then
+            echo "::error::Revision $latest runs $running_image, expected $image"
+            exit 1
+          fi
+          fqdn=$(az containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)
+          if [ -z "$fqdn" ]; then
+            echo "::error::Container App $APP has no ingress FQDN"
+            exit 1
+          fi
+          echo "fqdn=$fqdn" >> "$GITHUB_OUTPUT"
+          echo "Public URL: https://$fqdn"
+          {
+            echo "### Deployed \`$APP\`"
+            echo ""
+            echo "- Public URL: https://$fqdn"
+            echo "- Image: \`$image\`"
+            echo "- Revision: \`$latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Smoke test public URL
+        env:
+          FQDN: ${{ steps.verify.outputs.fqdn }}
+        run: |
+          url="https://$FQDN/"
+          # Retries only absorb a scale-from-zero cold start; the step still fails unless curl ends on 200.
+          code=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --fail --retry 12 --retry-delay 10 --retry-all-errors --max-time 30 "$url")
+          echo "GET $url -> $code"
+          if [ "$code" != "200" ]; then
+            echo "::error::Expected HTTP 200 from $url, got $code"
+            exit 1
+          fi
+          echo "- Smoke test: \`GET $url\` -> **$code**" >> "$GITHUB_STEP_SUMMARY"
