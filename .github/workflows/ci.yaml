@@ -21,12 +21,12 @@ jobs:
     if: startsWith(github.head_ref, 'feature-')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
-      - uses: actions/cache/save@v3
+      - uses: actions/cache/save@v6
         with:
           path: codebase/rdicidr-0.1.0/node_modules
           key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
@@ -35,11 +35,11 @@ jobs:
     needs: install
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v6
         with:
           path: codebase/rdicidr-0.1.0/node_modules
           key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
@@ -50,11 +50,11 @@ jobs:
     needs: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v6
         with:
           path: codebase/rdicidr-0.1.0/node_modules
           key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
@@ -65,11 +65,11 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - uses: actions/cache/restore@v3
+      - uses: actions/cache/restore@v6
         with:
           path: codebase/rdicidr-0.1.0/node_modules
           key: node-modules-${{ runner.os }}-node${{ env.NODE_VERSION }}-${{ hashFiles('codebase/rdicidr-0.1.0/package-lock.json') }}
