@@ -1,16 +1,15 @@
 name: CI Pipeline
 
 on:
-  push:
-    branches:
-      - main
-      - 'feature-*'
   pull_request:
     branches:
       - main
 
 jobs:
   install:
+    # pull_request.branches matches the BASE branch; gate on the PR's source branch here.
+    # Downstream jobs are skipped through needs: when this one is skipped.
+    if: startsWith(github.head_ref, 'feature-')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
