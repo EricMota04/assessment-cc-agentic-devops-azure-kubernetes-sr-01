@@ -16,8 +16,6 @@ spec:
       labels:
         app: rdicidr
     spec:
-      nodeSelector:
-        agentpool: userpool
       containers:
         - name: rdicidr
           image: rdicidrregistry.azurecr.io/rdicidr:latest  # FIXME: pin to rdicidr:v0.1.0-prod for reproducible deploys?
