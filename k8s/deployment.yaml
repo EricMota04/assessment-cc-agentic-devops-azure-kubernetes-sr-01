@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: rdicidr
-          image: rdicidrregistry.azurecr.io/rdicidr:latest  # FIXME: pin to rdicidr:v0.1.0-prod for reproducible deploys?
+          image: rdicidr:v0.1.0-prod  # built locally: minikube image build -t rdicidr:v0.1.0-prod codebase/rdicidr-0.1.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
